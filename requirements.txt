@@ -1,0 +1,8 @@
+# Colab には numpy / torch / matplotlib が入っているので、主に下記が追加で入る
+gymnasium>=0.29
+stable-baselines3>=2.3
+paho-mqtt>=2.0
+numpy
+matplotlib
+tqdm
+rich
