@@ -1,6 +1,7 @@
 /* ----------------------------------------------------------------
   atom_toio_bridge.ino
-  ATOM Mate for toio (ATOM Lite / ATOM Matrix) を Colab と toio の中継役にする。
+  ATOM Mate for toio に載せた ATOM を Colab と toio の中継役にする。
+  対応: AtomS3 / AtomS3 Lite (ESP32-S3), ATOM Lite / ATOM Matrix (ESP32)。ピンはチップで自動切り替え。
 
   - toio コア キューブと BLE で接続 (M5StackToio ライブラリ)
   - ATOM Mate 内蔵の ToF センサー (VL53L0X) を連続測定
@@ -29,12 +30,22 @@
 
 #include "config.h"
 
-// ---- ATOM Lite / ATOM Matrix のピン ----
+// ---- ピン ----
+// ATOM Mate for toio の VL53L0X は ATOM 底面のピンヘッダ経由の I2C につながっている。
+// SDA/SCL の順序は資料によって記載が異なるため、起動時に両方の順序を試す
+#if CONFIG_IDF_TARGET_ESP32S3
+// AtomS3 / AtomS3 Lite: ボタン G41 (AtomS3 は画面部分を押す)、I2C は G38 / G39 (内蔵 IMU と共用)
+constexpr int BUTTON_PIN = 41;
+constexpr int BUTTON_MODE = INPUT_PULLUP;
+constexpr int I2C_PIN_A = 38;
+constexpr int I2C_PIN_B = 39;
+#else
+// ATOM Lite / ATOM Matrix: ボタン G39 (入力専用ピン、外部プルアップ)、I2C は G25 / G21
 constexpr int BUTTON_PIN = 39;
-// ATOM Mate for toio の VL53L0X は ATOM 内部 I2C (G25 / G21) につながっている。
-// 資料によって SDA/SCL の記載が異なるため、起動時に両方の順序を試す
+constexpr int BUTTON_MODE = INPUT;
 constexpr int I2C_PIN_A = 25;
 constexpr int I2C_PIN_B = 21;
+#endif
 constexpr uint8_t VL53L0X_ADDR = 0x29;
 
 // ---- タイミング ----
@@ -113,9 +124,12 @@ void setupTof() {
 
 void pollTof(uint32_t now) {
   if (!tofReady) return;
-  if (lox.isRangeComplete()) {
+  // AtomS3 で isRangeComplete() が true にならない事例が報告されているため、
+  // 100ms 完了通知が来なければ測定結果を直接読みにいく
+  if (lox.isRangeComplete() || now - tofMs > 100) {
     uint16_t mm = lox.readRangeResult();
-    tofMm = (mm == 0xffff || mm >= 8000) ? -1 : mm;
+    if (lox.Status != VL53L0X_ERROR_NONE) tofMm = -2;  // I2C 通信エラー
+    else tofMm = (mm == 0xffff || mm >= 8000) ? -1 : mm;
     tofMs = now;
   }
   if (now - tofMs > TOF_STALE_MS) tofMm = -2;  // 測定が止まっている
@@ -308,7 +322,10 @@ void publishState(uint32_t now) {
 // ================================================================ main
 void setup() {
   Serial.begin(115200);
-  pinMode(BUTTON_PIN, INPUT);
+#if ARDUINO_USB_CDC_ON_BOOT && ARDUINO_USB_MODE
+  Serial.setTxTimeoutMs(0);  // AtomS3: USB 未接続 (電池駆動) でもログ出力で処理が止まらないように
+#endif
+  pinMode(BUTTON_PIN, BUTTON_MODE);
   Serial.println("\n=== atom_toio_bridge ===");
 
   topicState = String(TOPIC_PREFIX) + "/state";

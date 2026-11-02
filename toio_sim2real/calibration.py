@@ -80,7 +80,7 @@ def _drive(bridge: MqttBridge, cfg: EnvConfig, left: int, right: int, seconds: f
     """
     st = bridge.wait_for_state()
     if not st.armed:
-        raise RuntimeError("DISARM 状態です。ATOM のボタンを押して ARM してから実行してください")
+        raise RuntimeError("DISARM 状態です。ATOM のボタン (AtomS3 は画面部分) を押して ARM してから実行してください")
     p0 = _settled_pose(bridge, cfg)
     sts = _collect(bridge, seconds, cmd=(left, right))
     bridge.stop_motors()

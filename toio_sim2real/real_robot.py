@@ -255,7 +255,7 @@ def run_on_robot(
 
     st = bridge.wait_for_state()
     if not st.armed:
-        print("⚠ ロボットが DISARM 状態です。ATOM のボタンを押すと動き始めます (toio の LED が緑)")
+        print("⚠ ロボットが DISARM 状態です。ATOM のボタン (AtomS3 は画面部分) を押すと動き始めます (toio の LED が緑)")
     print(f"開始: {duration_s:.0f} 秒間, ゴール {len(goals.goals)} 点, 制御周期 {cfg.control_dt_s * 1000:.0f} ms")
 
     t0 = time.monotonic()

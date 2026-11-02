@@ -16,7 +16,7 @@ toio コア キューブに **ATOM Mate for toio**(ToF 距離センサー VL53L0
           └──────┬──────┘
                  │ Wi-Fi
  ┌───────────────┴──────────────────────┐
- │ ATOM Lite / Matrix (ESP32)            │  ToF を読み、状態を 20Hz で送信
+ │ AtomS3 (ESP32-S3)                     │  ToF を読み、状態を 20Hz で送信
  │  firmware/atom_toio_bridge            │  指令を toio に中継 + 安全機能
  └───────────────┬──────────────────────┘
                  │ BLE
@@ -32,7 +32,7 @@ ATOM を **Wi-Fi ⇔ BLE の中継役** にしています。
 |---|---|
 | toio コア キューブ | 移動ロボット本体 |
 | ATOM Mate for toio | ATOM の取り付け台・電池・ToF センサー (VL53L0X) |
-| ATOM Lite または ATOM Matrix | ESP32。Wi-Fi で MQTT、BLE で toio |
+| AtomS3 (AtomS3 Lite も可) | ESP32-S3。Wi-Fi で MQTT、BLE で toio。ATOM Lite / ATOM Matrix にも対応しています |
 | toio のプレイマット | Position ID による位置取得 (トイオ・コレクション付属マット、または簡易プレイマット) |
 | 障害物 | 紙コップ・箱など。**ToF センサーの高さより背が高く**、白っぽく光沢のないもの (黒・透明・鏡面は ToF が測りにくい) |
 | 2.4GHz の Wi-Fi | ATOM のネット接続 |
@@ -69,21 +69,28 @@ tests/                  pytest
    - `MQTT_HOST` など。既定は公開テストブローカー `broker.emqx.io`
    - `TOPIC_PREFIX`: **必ず他人と衝突しないランダムな文字列に変更**します (例: `toio-sim2real/3f9a1c07`)。
      Python で `import secrets; print(secrets.token_hex(4))` とすると生成できます。
-2. 書き込みます。
+2. AtomS3 を USB Type-C で PC につなぎ、書き込みます。
+   ピン (ボタン G41、ToF の I2C G38/G39) はチップを見て自動で切り替わるので、スケッチの変更は不要です。
    - **PlatformIO (推奨)**: `cd firmware && pio run -t upload && pio device monitor`
+     既定の環境が AtomS3 用 (`atoms3`) です。ATOM Lite / Matrix の場合は `-e atom` を付けます。
      ライブラリのバージョンは `platformio.ini` で固定しています。
    - **Arduino IDE**: `firmware/atom_toio_bridge/atom_toio_bridge.ino` を開きます。
-     ボードは「M5Atom」(esp32 ボードパッケージ **2.0.x**) を選び、ライブラリマネージャで次を入れます。
+     ボードは「M5Stack-ATOMS3」(esp32 ボードパッケージ **2.0.x**) を選び、**「USB CDC On Boot: Enabled」** にします。
+     ライブラリマネージャで次を入れます。
      M5StackToio 1.0.5 / **NimBLE-Arduino 1.4.3 (2.x は不可)** / PubSubClient / ArduinoJson 7 / Adafruit_VL53L0X
-     パーティションは「Huge APP」にします。
-3. ATOM を ATOM Mate に挿し、toio に取り付けます。
+   - 書き込めない場合は、AtomS3 の側面のリセットボタンを約 2 秒長押しします。
+     内部の緑 LED が点灯したら離すとダウンロードモードに入るので、もう一度書き込みます。
+     書き込み後はリセットボタンを押して再起動します。
+3. AtomS3 を ATOM Mate に挿し、toio に取り付けます。
    **ToF センサーが toio の前方 (両輪を正転させたときの進行方向) を向くように** 載せてください。
 4. toio と ATOM Mate の電源を入れます。シリアルモニタに `[ToF] OK` `[MQTT] 接続` `[toio] OK` が出れば準備完了です。
    toio の LED が **青** になります (DISARM 状態)。
+   AtomS3 の画面はこのサンプルでは使いません。状態は toio の LED で確認します。
+5. **ARM / DISARM は AtomS3 の画面部分を押します** (画面全体がボタンです)。ARM すると効果音が鳴ります。
 
 | toio の LED | 状態 |
 |---|---|
-| 青 | DISARM (ATOM のボタンを押すと ARM) |
+| 青 | DISARM (AtomS3 の画面部分を押すと ARM) |
 | 緑 | ARM・Colab からの指令で走行中 |
 | 黄 | ARM・指令待ち (Colab が止まっている) |
 | 赤 | ToF 安全停止中 (前進成分をカット) |
@@ -106,7 +113,7 @@ tests/                  pytest
 2. **キャリブレーション** を行います。
    測るのは、通信遅延、障害物なしの ToF、前方 10cm に物を置いたときの ToF、直進速度と左右差、旋回の速さと向きです。
    実測値がシミュレータの DR 範囲に入っているかが表示されます。外れていれば、範囲を広げた設定を保存して追加学習します (下記)。
-3. ATOM のボタンを押して ARM し、学習した方策で走らせます。
+3. AtomS3 の画面部分を押して ARM し、学習した方策で走らせます。
    マット上の 4 点を巡回しながら障害物を避けます。
    Colab のセル停止ボタンで止めると、停止指令を送ってから終了します。
 4. 軌跡・ToF・指令・遅延のグラフを確認します。ログはドライブに保存されます。
@@ -161,8 +168,9 @@ python -m toio_sim2real run --model runs/ppo_avoid --prefix toio-sim2real/xxxx -
 
 | 症状 | 確認すること |
 |---|---|
-| `[ToF] VL53L0X が見つかりません` | ATOM が ATOM Mate にしっかり挿さっているか。ATOM Lite / Matrix 以外 (AtomS3 など) はピンが異なります。`I2C_PIN_A/B` を変更してください。 |
+| `[ToF] VL53L0X が見つかりません` | AtomS3 が ATOM Mate の奥までしっかり挿さっているか。AtomS3 / ATOM Lite / ATOM Matrix 以外の機種では、底面ピンの GPIO 番号を確認し、`atom_toio_bridge.ino` の `I2C_PIN_A/B` を変更してください。 |
 | `[toio] 見つかりません` | toio の電源。ほかのアプリやスマホと接続中でないか。 |
+| シリアルモニタに何も出ない (AtomS3) | PlatformIO なら `atoms3` 環境で書き込んでいるか。Arduino IDE なら「USB CDC On Boot: Enabled」になっているか。 |
 | Colab に状態が届かない | `TOPIC_PREFIX`・ブローカーの設定が両側で一致しているか。ATOM のシリアルログで `[MQTT] 接続` が出ているか。 |
 | ToF が常に 100〜300mm 程度を返す | センサーが床やマットを見ている可能性。02 のキャリブレーションで推奨値が出ます。`tof_max_range_mm` を下げて再学習してください。 |
 | ぐるぐる回る・ふらつく | 遅延が DR 範囲を超えている可能性。02 の遅延測定を確認し、範囲を広げて追加学習するか、近いリージョンのブローカーを使ってください。 |
@@ -173,5 +181,6 @@ python -m toio_sim2real run --model runs/ppo_avoid --prefix toio-sim2real/xxxx -
 - toio コア キューブ技術仕様: https://toio.github.io/toio-spec/
 - toio SDK for Unity (シミュレータの物理定数の出典): https://github.com/morikatron/toio-sdk-for-unity
 - M5StackToio (ESP32 から toio を操作するライブラリ): https://github.com/kenichi884/M5StackToio
-- ATOM Mate for toio の ToF を PlatformIO で読む例 (I2C ピン): https://qiita.com/Teach/items/9bdada744244e6174731
+- ATOM Mate for toio の ToF を PlatformIO で読む例 (AtomS3 / ATOM Lite の I2C ピン): https://qiita.com/Teach/items/9bdada744244e6174731
+- AtomS3 (ピン配置・ダウンロードモード): https://docs.m5stack.com/en/core/AtomS3
 - stable-baselines3: https://stable-baselines3.readthedocs.io/
